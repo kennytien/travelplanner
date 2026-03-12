@@ -6,4 +6,7 @@
     "sqlite3": "^5.1.6",
     "cors": "^2.8.5"
   }
+  "scripts": {
+  "start": "node server.js"
+ }
 }
