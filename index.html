@@ -1,17 +1,22 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <title>Travel Planner</title>
 <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<h1>My Travel Planner</h1>
+<h1>我的旅遊行程規劃</h1>
 
-<input id="place" placeholder="輸入地點">
-<button onclick="addPlace()">加入行程</button>
+<div class="input-area">
+    <input id="place" placeholder="輸入景點或行程">
+    <input id="day" type="number" placeholder="Day">
+    <button onclick="addItem()">加入</button>
+</div>
+
+<h2>行程列表</h2>
 
 <ul id="list"></ul>
 
