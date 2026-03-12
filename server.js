@@ -28,22 +28,23 @@ app.get("/trips", (req, res) => {
 // 新增行程
 app.post("/trips", (req, res) => {
 
-    const { day, place } = req.body
+ const { date, day, place, detail } = req.body
 
-    db.run(
-        "INSERT INTO trips (day, place) VALUES (?, ?)",
-        [day, place],
-        function(err){
+ db.run(
+  "INSERT INTO trips (date, day, place, detail) VALUES (?, ?, ?, ?)",
+  [date, day, place, detail],
+  function(err){
 
-            if(err){
-                res.status(500).send(err)
-                return
-            }
+   if(err){
+    res.status(500).send(err)
+    return
+   }
 
-            res.json({ id: this.lastID })
+   res.json({ id:this.lastID })
 
-        }
-    )
+  }
+
+ )
 
 })
 

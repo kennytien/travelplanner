@@ -6,9 +6,11 @@ db.serialize(() => {
 
     db.run(`
         CREATE TABLE IF NOT EXISTS trips (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            day INTEGER,
-            place TEXT
+			 id INTEGER PRIMARY KEY AUTOINCREMENT,
+			 date TEXT,
+			 day INTEGER,
+			 place TEXT,
+			 detail TEXT
         )
     `)
 

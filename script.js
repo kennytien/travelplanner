@@ -2,55 +2,65 @@ const API = "https://dreamtheater.onrender.com"
 
 async function loadTrips(){
 
-    const res = await fetch(API + "/trips")
-    const data = await res.json()
+ const res = await fetch(API + "/trips")
+ const data = await res.json()
 
-    const list = document.getElementById("list")
+ const list = document.getElementById("list")
 
-    list.innerHTML=""
+ list.innerHTML=""
 
-    data.forEach(trip => {
+ data.forEach(trip => {
 
-        const li = document.createElement("li")
+  const tr = document.createElement("tr")
 
-        li.innerHTML =
-        "Day " + trip.day + " - " + trip.place +
-        `<button onclick="deleteTrip(${trip.id})">Delete</button>`
+  tr.innerHTML = `
+   <td>${trip.date}</td>
+   <td>Day ${trip.day}</td>
+   <td>${trip.place}</td>
+   <td>${trip.detail}</td>
+   <td>
+     <button onclick="deleteTrip(${trip.id})">Delete</button>
+   </td>
+  `
 
-        list.appendChild(li)
+  list.appendChild(tr)
 
-    })
+ })
 
 }
 
 async function addTrip(){
 
-    const day = document.getElementById("day").value
-    const place = document.getElementById("place").value
+ const date = document.getElementById("date").value
+ const day = document.getElementById("day").value
+ const place = document.getElementById("place").value
+ const detail = document.getElementById("detail").value
 
-    await fetch(API + "/trips", {
+ await fetch(API + "/trips",{
 
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
+  method:"POST",
+  headers:{ "Content-Type":"application/json" },
 
-        body:JSON.stringify({
-            day:day,
-            place:place
-        })
+  body:JSON.stringify({
+   date,
+   day,
+   place,
+   detail
+  })
 
-    })
+ })
 
-    loadTrips()
+ loadTrips()
 
 }
 
 async function deleteTrip(id){
 
-    await fetch(API + "/trips/"+id,{
-        method:"DELETE"
-    })
+ await fetch(API + "/trips/"+id,{
+  method:"DELETE"
+ })
 
-    loadTrips()
+ loadTrips()
 
 }
 
