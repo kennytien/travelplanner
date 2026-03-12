@@ -1,53 +1,57 @@
-let list = document.getElementById("list")
+const API = "http://localhost:3000"
 
-let travelData = JSON.parse(localStorage.getItem("travel")) || []
+async function loadTrips(){
 
-function save() {
-    localStorage.setItem("travel", JSON.stringify(travelData))
-}
+    const res = await fetch(API + "/trips")
+    const data = await res.json()
 
-function render() {
+    const list = document.getElementById("list")
 
-    list.innerHTML = ""
+    list.innerHTML=""
 
-    travelData.forEach((item, index) => {
+    data.forEach(trip => {
 
-        let li = document.createElement("li")
+        const li = document.createElement("li")
 
         li.innerHTML =
-        "Day " + item.day +
-        " - " + item.place +
-        '<span class="delete" onclick="removeItem(' + index + ')">✖</span>'
+        "Day " + trip.day + " - " + trip.place +
+        `<button onclick="deleteTrip(${trip.id})">Delete</button>`
 
         list.appendChild(li)
 
     })
+
 }
 
-function addItem() {
+async function addTrip(){
 
-    let place = document.getElementById("place").value
-    let day = document.getElementById("day").value
+    const day = document.getElementById("day").value
+    const place = document.getElementById("place").value
 
-    if(place === "" || day === "") return
+    await fetch(API + "/trips", {
 
-    travelData.push({
-        day: day,
-        place: place
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+
+        body:JSON.stringify({
+            day:day,
+            place:place
+        })
+
     })
 
-    save()
-    render()
+    loadTrips()
 
-    document.getElementById("place").value = ""
 }
 
-function removeItem(index) {
+async function deleteTrip(id){
 
-    travelData.splice(index,1)
+    await fetch(API + "/trips/"+id,{
+        method:"DELETE"
+    })
 
-    save()
-    render()
+    loadTrips()
+
 }
 
-render()
+loadTrips()
