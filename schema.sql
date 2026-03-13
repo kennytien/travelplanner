@@ -1,0 +1,8 @@
+CREATE TABLE trips (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL,
+    day INTEGER NOT NULL,
+    location TEXT NOT NULL,
+    detail TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

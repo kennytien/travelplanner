@@ -1,73 +1,80 @@
 const express = require("express")
 const cors = require("cors")
-const db = require("./db")
+const pool = require("./db")
 
 const app = express()
-
-const PORT = process.env.PORT || 3000
 
 app.use(cors())
 app.use(express.json())
 
 // 取得所有行程
-app.get("/trips", (req, res) => {
+app.get("/trips", async (req,res) => {
 
-    db.all("SELECT * FROM trips", (err, rows) => {
+  try {
 
-        if(err) {
-            res.status(500).send(err)
-            return
-        }
+    const result = await pool.query(
+      "SELECT * FROM trips ORDER BY date, day"
+    )
 
-        res.json(rows)
+    res.json(result.rows)
 
-    })
+  } catch(err) {
+
+    res.status(500).send(err)
+
+  }
 
 })
 
 // 新增行程
-app.post("/trips", (req, res) => {
+app.post("/trips", async (req,res) => {
 
- const { date, day, place, detail } = req.body
+  const { date, day, location, detail } = req.body
 
- db.run(
-  "INSERT INTO trips (date, day, place, detail) VALUES (?, ?, ?, ?)",
-  [date, day, place, detail],
-  function(err){
+  try {
 
-   if(err){
+    const result = await pool.query(
+
+      `INSERT INTO trips (date, day, location, detail)
+       VALUES ($1,$2,$3,$4)
+       RETURNING *`,
+
+      [date, day, location, detail]
+
+    )
+
+    res.json(result.rows[0])
+
+  } catch(err) {
+
     res.status(500).send(err)
-    return
-   }
-
-   res.json({ id:this.lastID })
 
   }
-
- )
 
 })
 
 // 刪除
-app.delete("/trips/:id", (req, res) => {
+app.delete("/trips/:id", async (req,res) => {
 
-    db.run(
-        "DELETE FROM trips WHERE id=?",
-        req.params.id,
-        function(err){
+  try {
 
-            if(err){
-                res.status(500).send(err)
-                return
-            }
-
-            res.sendStatus(200)
-
-        }
+    await pool.query(
+      "DELETE FROM trips WHERE id=$1",
+      [req.params.id]
     )
+
+    res.sendStatus(200)
+
+  } catch(err) {
+
+    res.status(500).send(err)
+
+  }
 
 })
 
+const PORT = process.env.PORT || 3000
+
 app.listen(PORT, () => {
-    console.log("server running on " + PORT)
+  console.log("server running on " + PORT)
 })

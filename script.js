@@ -2,65 +2,69 @@ const API = "https://dreamtheater.onrender.com"
 
 async function loadTrips(){
 
- const res = await fetch(API + "/trips")
- const data = await res.json()
+  const res = await fetch(API + "/trips")
 
- const list = document.getElementById("list")
+  const trips = await res.json()
 
- list.innerHTML=""
+  const table = document.getElementById("tripList")
 
- data.forEach(trip => {
+  table.innerHTML = ""
 
-  const tr = document.createElement("tr")
+  trips.forEach(trip => {
 
-  tr.innerHTML = `
-   <td>${trip.date}</td>
-   <td>Day ${trip.day}</td>
-   <td>${trip.place}</td>
-   <td>${trip.detail}</td>
-   <td>
-     <button onclick="deleteTrip(${trip.id})">Delete</button>
-   </td>
-  `
+    const row = document.createElement("tr")
 
-  list.appendChild(tr)
+    row.innerHTML = `
+      <td>${trip.date}</td>
+      <td>Day ${trip.day}</td>
+      <td>${trip.location}</td>
+      <td>${trip.detail}</td>
+      <td>
+      <button onclick="deleteTrip(${trip.id})">Delete</button>
+      </td>
+    `
 
- })
+    table.appendChild(row)
+
+  })
 
 }
 
 async function addTrip(){
 
- const date = document.getElementById("date").value
- const day = document.getElementById("day").value
- const place = document.getElementById("place").value
- const detail = document.getElementById("detail").value
+  const date = document.getElementById("date").value
+  const day = document.getElementById("day").value
+  const location = document.getElementById("location").value
+  const detail = document.getElementById("detail").value
 
- await fetch(API + "/trips",{
+  await fetch(API + "/trips", {
 
-  method:"POST",
-  headers:{ "Content-Type":"application/json" },
+    method:"POST",
 
-  body:JSON.stringify({
-   date,
-   day,
-   place,
-   detail
+    headers:{
+      "Content-Type":"application/json"
+    },
+
+    body:JSON.stringify({
+      date,
+      day,
+      location,
+      detail
+    })
+
   })
 
- })
-
- loadTrips()
+  loadTrips()
 
 }
 
 async function deleteTrip(id){
 
- await fetch(API + "/trips/"+id,{
-  method:"DELETE"
- })
+  await fetch(API + "/trips/" + id, {
+    method:"DELETE"
+  })
 
- loadTrips()
+  loadTrips()
 
 }
 

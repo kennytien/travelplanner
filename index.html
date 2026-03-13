@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
 <meta charset="utf-8">
 <title>Travel Planner</title>
@@ -9,14 +10,15 @@
 <body>
 
 <h1>Travel Planner</h1>
-<div class="input-area">
-<input id="date" type="date">
+
+<input type="date" id="date">
 <input id="day" placeholder="Day">
-<input id="place" placeholder="Location">
-<input id="detail" placeholder="Detail plan">
+<input id="location" placeholder="Location">
+<input id="detail" placeholder="Detail">
+
 <button onclick="addTrip()">Add</button>
-</div>
-<table id="tripTable">
+
+<table border="1">
 
 <thead>
 <tr>
@@ -28,11 +30,12 @@
 </tr>
 </thead>
 
-<tbody id="list"></tbody>
+<tbody id="tripList"></tbody>
 
 </table>
 
 <script src="script.js"></script>
 
 </body>
+
 </html>
