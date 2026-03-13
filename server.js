@@ -1,11 +1,51 @@
 const express = require("express")
 const cors = require("cors")
-const pool = require("./db")
+const { Pool } = require("pg")
 
 const app = express()
 
 app.use(cors())
 app.use(express.json())
+
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+})
+
+/* ---------------------------------
+   自動建立資料表
+--------------------------------- */
+async function initDatabase(){
+
+  try {
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trips (
+        id SERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        day INTEGER NOT NULL,
+        location TEXT NOT NULL,
+        detail TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    console.log("Trips table ready")
+
+  } catch(err) {
+
+    console.error("Database init error:", err)
+
+  }
+
+}
+
+/* ---------------------------------
+   API
+--------------------------------- */
 
 // 取得所有行程
 app.get("/trips", async (req,res) => {
@@ -20,7 +60,8 @@ app.get("/trips", async (req,res) => {
 
   } catch(err) {
 
-    res.status(500).send(err)
+    console.error(err)
+    res.status(500).send("Server error")
 
   }
 
@@ -47,13 +88,14 @@ app.post("/trips", async (req,res) => {
 
   } catch(err) {
 
-    res.status(500).send(err)
+    console.error(err)
+    res.status(500).send("Insert error")
 
   }
 
 })
 
-// 刪除
+// 刪除行程
 app.delete("/trips/:id", async (req,res) => {
 
   try {
@@ -67,14 +109,24 @@ app.delete("/trips/:id", async (req,res) => {
 
   } catch(err) {
 
-    res.status(500).send(err)
+    console.error(err)
+    res.status(500).send("Delete error")
 
   }
 
 })
 
+/* ---------------------------------
+   Server start
+--------------------------------- */
+
 const PORT = process.env.PORT || 3000
 
-app.listen(PORT, () => {
-  console.log("server running on " + PORT)
+app.listen(PORT, async () => {
+
+  console.log("Server running on port " + PORT)
+
+  // 啟動時建立 table
+  await initDatabase()
+
 })
