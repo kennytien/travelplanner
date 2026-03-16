@@ -1,5 +1,8 @@
 const API = "https://dreamtheater.onrender.com"
 
+// 儲存當前編輯的 trip id
+let editingTripId = null
+
 async function loadTrips(){
 
   const res = await fetch(API + "/trips")
@@ -13,21 +16,141 @@ async function loadTrips(){
   trips.forEach(trip => {
 
     const row = document.createElement("tr")
+    row.dataset.tripId = trip.id
 
     row.innerHTML = `
-      <td>${trip.date}</td>
-      <td>Day ${trip.day}</td>
-      <td>${trip.location}</td>
-      <td>${trip.detail}</td>
+      <td class="editable" data-field="date">${trip.date}</td>
+      <td class="editable" data-field="day">Day ${trip.day}</td>
+      <td class="editable" data-field="location">${trip.location}</td>
+      <td class="editable" data-field="detail">${trip.detail}</td>
       <td>
       <button onclick="deleteTrip(${trip.id})">Delete</button>
       </td>
     `
 
+    // 為每個可編輯的單元格添加點擊事件
+    const editableCells = row.querySelectorAll(".editable")
+    editableCells.forEach(cell => {
+      cell.addEventListener("click", function() {
+        makeEditable(this, trip)
+      })
+    })
+
     table.appendChild(row)
 
   })
 
+}
+
+function makeEditable(cell, trip) {
+  // 如果已經在編輯其他行，先取消
+  if (editingTripId !== null && editingTripId !== trip.id) {
+    return
+  }
+
+  if (cell.querySelector("input")) {
+    return // 已經在編輯
+  }
+
+  const field = cell.dataset.field
+  let currentValue = cell.textContent
+
+  // 移除 "Day " 前綴
+  if (field === "day") {
+    currentValue = currentValue.replace("Day ", "")
+  }
+
+  const input = document.createElement("input")
+  input.type = field === "date" ? "date" : "text"
+  input.value = currentValue
+  input.style.width = "100%"
+
+  cell.textContent = ""
+  cell.appendChild(input)
+  input.focus()
+  input.select()
+
+  editingTripId = trip.id
+
+  // 處理保存
+  async function saveEdit() {
+    const newValue = input.value
+
+    // 驗證輸入
+    if (!newValue) {
+      alert("欄位不能為空！")
+      return
+    }
+
+    if (field === "day") {
+      if (isNaN(newValue) || newValue <= 0 || !Number.isInteger(Number(newValue))) {
+        alert("Day 必須是正整數！")
+        return
+      }
+    }
+
+    if (field === "location") {
+      if (newValue.length < 2) {
+        alert("Location 至少需要 2 個字元！")
+        return
+      }
+    }
+
+    // 準備更新的數據
+    const updateData = {
+      date: field === "date" ? newValue : trip.date,
+      day: field === "day" ? newValue : trip.day,
+      location: field === "location" ? newValue : trip.location,
+      detail: field === "detail" ? newValue : trip.detail
+    }
+
+    // 發送 PUT 請求
+    try {
+      const response = await fetch(API + "/trips/" + trip.id, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(updateData)
+      })
+
+      if (response.ok) {
+        editingTripId = null
+        loadTrips()
+      } else {
+        alert("更新失敗！")
+        editingTripId = null
+        loadTrips()
+      }
+    } catch (error) {
+      console.error("Error:", error)
+      alert("更新出錯！")
+      editingTripId = null
+      loadTrips()
+    }
+  }
+
+  // 處理取消
+  function cancelEdit() {
+    editingTripId = null
+    loadTrips()
+  }
+
+  // Enter 鍵保存，Escape 鍵取消
+  input.addEventListener("keydown", function(event) {
+    if (event.key === "Enter") {
+      saveEdit()
+    } else if (event.key === "Escape") {
+      cancelEdit()
+    }
+  })
+
+  // 失焦時自動保存
+  input.addEventListener("blur", function() {
+    if (editingTripId === trip.id) {
+      saveEdit()
+    }
+  })
 }
 
 async function addTrip(){
