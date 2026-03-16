@@ -37,25 +37,43 @@ async function addTrip(){
   const location = document.getElementById("location").value
   const detail = document.getElementById("detail").value
 
+  // 驗證輸入格式
+  if (!date || !day || !location || !detail) {
+    alert("有欄位漏掉了！")
+    return
+  }
+
+  // 驗證 day 是否為正整數
+  if (isNaN(day) || day <= 0 || !Number.isInteger(Number(day))) {
+    alert("Day 必須是正整數！")
+    return
+  }
+
+  // 驗證 location 長度
+  if (location.length < 2) {
+    alert("Location 至少需要 2 個字元！")
+    return
+  }
+
   await fetch(API + "/trips", {
-
     method:"POST",
-
     headers:{
       "Content-Type":"application/json"
     },
-
     body:JSON.stringify({
       date,
       day,
       location,
       detail
     })
-
   })
 
   loadTrips()
-
+  // 清除輸入欄位
+  document.getElementById("date").value = ""
+  document.getElementById("day").value = ""
+  document.getElementById("location").value = ""
+  document.getElementById("detail").value = ""
 }
 
 async function deleteTrip(id){
