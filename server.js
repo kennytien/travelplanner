@@ -40,7 +40,6 @@ async function initDatabase(){
     console.error("Database init error:", err)
 
   }
-
 }
 
 /* ---------------------------------
@@ -59,12 +58,11 @@ app.get("/trips", async (req,res) => {
     res.json(result.rows)
 
   } catch(err) {
-
+    
     console.error(err)
     res.status(500).send("Server error")
 
   }
-
 })
 
 // 新增行程
@@ -92,7 +90,38 @@ app.post("/trips", async (req,res) => {
     res.status(500).send("Insert error")
 
   }
+})
 
+// 更新行程
+app.put("/trips/:id", async (req,res) => {
+
+  const { date, day, location, detail } = req.body
+
+  try {
+
+    const result = await pool.query(
+
+      `UPDATE trips 
+       SET date=$1, day=$2, location=$3, detail=$4 
+       WHERE id=$5
+       RETURNING *`,
+
+      [date, day, location, detail, req.params.id]
+
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).send("Trip not found")
+    }
+
+    res.json(result.rows[0])
+
+  } catch(err) {
+
+    console.error(err)
+    res.status(500).send("Update error")
+
+  }
 })
 
 // 刪除行程
@@ -113,7 +142,6 @@ app.delete("/trips/:id", async (req,res) => {
     res.status(500).send("Delete error")
 
   }
-
 })
 
 /* ---------------------------------
@@ -128,5 +156,4 @@ app.listen(PORT, async () => {
 
   // 啟動時建立 table
   await initDatabase()
-
 })
