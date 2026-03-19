@@ -9,6 +9,7 @@
 
 <body>
 
+<!-- Hero Banner -->
 <div class="hero-banner">
   <div class="hero-text">
     <h1>Travel Planner</h1>
@@ -16,28 +17,47 @@
   </div>
 </div>
 
-<input type="date" id="date">
-<input id="day" placeholder="Day">
-<input id="location" placeholder="Location">
-<input id="detail" placeholder="Detail">
+<!-- Main Container -->
+<div class="container">
 
-<button onclick="addTrip()">Add</button>
+  <!-- Input Card -->
+  <div class="input-card">
 
-<table border="1">
+    <h2>Add New Trip</h2>
 
-<thead>
-<tr>
-<th>Date</th>
-<th>Day</th>
-<th>Location</th>
-<th>Detail</th>
-<th>Action</th>
-</tr>
-</thead>
+    <div class="input-group">
+      <input type="date" id="date">
+      <input id="day" placeholder="Day (e.g. 1)">
+      <input id="location" placeholder="Location">
+      <input id="detail" placeholder="Detail">
+      <button onclick="addTrip()">Add</button>
+    </div>
 
-<tbody id="tripList"></tbody>
+  </div>
 
-</table>
+  <!-- Table -->
+  <div class="table-card">
+
+    <h2>Your Trips</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Day</th>
+          <th>Location</th>
+          <th>Detail</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+
+      <tbody id="tripList"></tbody>
+
+    </table>
+
+  </div>
+
+</div>
 
 <script src="script.js"></script>
 
