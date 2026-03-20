@@ -2,67 +2,102 @@
 <html>
 
 <head>
-<meta charset="utf-8">
-<title>Travel Planner</title>
+  <meta charset="utf-8">
+  <title>Travel Planner</title>
 
-<link rel="stylesheet" href="style.css">
+  <!-- CSS -->
+  <link rel="stylesheet" href="style.css">
 
-<!-- 地圖套件 -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <!-- Leaflet 地圖 -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
 
 </head>
 
 <body>
 
-<!-- Hero -->
-<div class="hero-banner">
-  <div class="hero-text">
-    <h1>Travel Planner</h1>
-    <p>Plan your next adventure</p>
-  </div>
-</div>
-
-<div class="container">
-
-  <!-- Input -->
-  <div class="input-card">
-    <h2>Add Trip</h2>
-
-    <div class="input-group">
-      <input type="date" id="date">
-      <input id="day" placeholder="Day">
-      <input id="location" placeholder="Location">
-      <input id="detail" placeholder="Detail">
-      <button onclick="addTrip()">Add</button>
+  <!-- =======================
+       Hero Banner
+  ======================== -->
+  <div class="hero-banner">
+    <div class="hero-text">
+      <h1>Travel Planner</h1>
+      <p>Plan your next adventure</p>
     </div>
   </div>
 
-  <!-- Map -->
-  <div class="map-card">
-    <h2>Map</h2>
-    <div id="map"></div>
+  <!-- =======================
+       主容器
+  ======================== -->
+  <div class="container">
+
+    <!-- =======================
+         新增行程
+    ======================== -->
+    <div class="input-card">
+      <h2>Add New Trip</h2>
+
+      <div class="input-group">
+        <input type="date" id="date">
+        <input id="day" placeholder="Day">
+        <input id="location" placeholder="Location">
+        <input id="detail" placeholder="Detail">
+        <button onclick="addTrip()">Add</button>
+      </div>
+    </div>
+
+
+    <!-- =======================
+         地圖
+    ======================== -->
+    <div class="map-card">
+      <h2>🗺 Travel Map</h2>
+      <div id="map"></div>
+    </div>
+
+
+    <!-- =======================
+         行程（JS render）
+    ======================== -->
+    <div class="table-card">
+      <h2>📅 Your Trips</h2>
+      <div id="tripList"></div>
+    </div>
+
+
+    <!-- =======================
+         留言板
+    ======================== -->
+    <div class="comment-card">
+      <h2>💬 Comments</h2>
+
+      <div class="comment-input">
+        <input id="username" placeholder="Your name">
+        <input id="commentInput" placeholder="Write a comment...">
+        <button onclick="addComment()">Send</button>
+      </div>
+
+      <div id="commentList"></div>
+    </div>
+
   </div>
 
-  <!-- Cards -->
-  <div class="trip-card-container" id="tripList"></div>
 
-  <div class="comment-card">
-  <h2>💬 Comments</h2>
+  <!-- =======================
+       JS Library
+  ======================== -->
 
-  <div class="comment-input">
-    <input id="username" placeholder="Your name">
-    <input id="commentInput" placeholder="Write a comment...">
-    <button onclick="addComment()">Send</button>
-  </div>
+  <!-- Leaflet -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <div id="commentList"></div>
-  </div>
+  <!-- 拖曳排序 -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-</div>
-
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="script.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <!-- 主程式 -->
+  <script src="script.js"></script>
 
 </body>
+
 </html>

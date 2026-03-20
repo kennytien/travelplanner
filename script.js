@@ -12,7 +12,7 @@ function formatDate(dateString){
 }
 
 /* -----------------------
-   時間格式（留言）
+   留言時間
 ----------------------- */
 function timeAgo(timestamp){
 
@@ -49,7 +49,7 @@ function clearMap(){
 
 
 /* -----------------------
-   地點轉座標
+   地點 → 座標
 ----------------------- */
 async function getCoords(location){
 
@@ -69,6 +69,27 @@ async function getCoords(location){
   }
 
   return null
+}
+
+
+/* -----------------------
+   ⭐ 座標 → 海拔
+----------------------- */
+async function getElevation(lat, lon){
+
+  try {
+    const res = await fetch(
+      `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`
+    )
+
+    const data = await res.json()
+
+    return data.results[0].elevation
+
+  } catch(err){
+    console.error("Elevation error:", err)
+    return null
+  }
 }
 
 
@@ -134,7 +155,7 @@ function makeEditable(el, trip){
 
 
 /* -----------------------
-   載入行程（最終版）
+   載入行程（含海拔）
 ----------------------- */
 async function loadTrips(){
 
@@ -171,10 +192,15 @@ async function loadTrips(){
         dayBlock.appendChild(dayContainer)
         container.appendChild(dayBlock)
 
-        // 拖曳
-        new Sortable(dayContainer, {
-          animation: 150
-        })
+        new Sortable(dayContainer, { animation: 150 })
+      }
+
+      const coords = await getCoords(trip.location)
+
+      let elevation = null
+
+      if(coords){
+        elevation = await getElevation(coords[0], coords[1])
       }
 
       const card = document.createElement("div")
@@ -184,7 +210,7 @@ async function loadTrips(){
         <div class="trip-info">
 
           <div class="editable" data-field="location">
-            📍 ${trip.location}
+            📍 ${trip.location} ${elevation ? `⛰ ${elevation}m` : ""}
           </div>
 
           <div class="editable" data-field="detail">
@@ -198,15 +224,11 @@ async function loadTrips(){
         </button>
       `
 
-      // inline edit
       card.querySelectorAll(".editable").forEach(el=>{
         el.addEventListener("click", ()=> makeEditable(el, trip))
       })
 
       dayContainer.appendChild(card)
-
-      // 地圖
-      const coords = await getCoords(trip.location)
 
       if(coords){
 
@@ -214,13 +236,15 @@ async function loadTrips(){
 
         const marker = L.marker(coords)
           .addTo(map)
-          .bindPopup(`<b>${trip.location}</b>`)
+          .bindPopup(`
+            <b>${trip.location}</b><br>
+            ⛰ ${elevation ? elevation + " m" : "N/A"}
+          `)
 
         markers.push(marker)
       }
     }
 
-    // 畫路線
     if(routeCoords.length > 1){
       polyline = L.polyline(routeCoords, { color: 'blue' }).addTo(map)
       map.fitBounds(polyline.getBounds())
@@ -297,7 +321,6 @@ async function deleteTrip(id){
    💬 留言系統
 ======================= */
 
-/* 載入留言 */
 async function loadComments(){
 
   try {
@@ -331,7 +354,6 @@ async function loadComments(){
 }
 
 
-/* 新增留言 */
 async function addComment(){
 
   const username = document.getElementById("username").value
@@ -342,40 +364,27 @@ async function addComment(){
     return
   }
 
-  try {
+  await fetch(API + "/comments", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ username, text })
+  })
 
-    await fetch(API + "/comments", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ username, text })
-    })
+  document.getElementById("commentInput").value = ""
 
-    document.getElementById("commentInput").value = ""
-
-    loadComments()
-
-  } catch(err){
-    console.error(err)
-  }
+  loadComments()
 }
 
 
-/* 刪除留言 */
 async function deleteComment(id){
 
   if(!confirm("刪除留言？")) return
 
-  try {
+  await fetch(API + "/comments/" + id, {
+    method:"DELETE"
+  })
 
-    await fetch(API + "/comments/" + id, {
-      method:"DELETE"
-    })
-
-    loadComments()
-
-  } catch(err){
-    console.error(err)
-  }
+  loadComments()
 }
 
 
@@ -387,5 +396,4 @@ initMap()
 loadTrips()
 loadComments()
 
-// ⭐ 即時更新（每3秒）
 setInterval(loadComments, 3000)
