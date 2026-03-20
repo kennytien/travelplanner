@@ -15,7 +15,6 @@ function formatDate(dateString){
    留言時間
 ----------------------- */
 function timeAgo(timestamp){
-
   const diff = Math.floor((new Date() - new Date(timestamp)) / 1000)
 
   if(diff < 60) return "just now"
@@ -25,12 +24,10 @@ function timeAgo(timestamp){
   return Math.floor(diff/86400) + " days ago"
 }
 
-
 /* -----------------------
    地圖初始化
 ----------------------- */
 function initMap(){
-
   map = L.map('map').setView([25.0330, 121.5654], 5)
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -47,12 +44,10 @@ function clearMap(){
   }
 }
 
-
 /* -----------------------
-   地點 → 座標
+   Geocode
 ----------------------- */
 async function getCoords(location){
-
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
@@ -63,7 +58,6 @@ async function getCoords(location){
     if(data.length > 0){
       return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
     }
-
   } catch(err){
     console.error("Geocode error:", err)
   }
@@ -71,27 +65,37 @@ async function getCoords(location){
   return null
 }
 
-
 /* -----------------------
-   ⭐ 座標 → 海拔
+   Elevation（穩定版）
 ----------------------- */
 async function getElevation(lat, lon){
-
   try {
+
     const res = await fetch(
       `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`
     )
 
-    const data = await res.json()
+    if(!res.ok){
+      console.warn("Elevation API failed:", res.status)
+      return null
+    }
 
-    return data.results[0].elevation
+    const text = await res.text()
+
+    if(text.startsWith("<")){
+      console.warn("Elevation returned HTML")
+      return null
+    }
+
+    const data = JSON.parse(text)
+
+    return data.results?.[0]?.elevation ?? null
 
   } catch(err){
     console.error("Elevation error:", err)
     return null
   }
 }
-
 
 /* -----------------------
    Inline 編輯
@@ -101,10 +105,7 @@ function makeEditable(el, trip){
   if(el.querySelector("input")) return
 
   let field = el.dataset.field
-  let value = ""
-
-  if(field === "location") value = trip.location
-  if(field === "detail") value = trip.detail || ""
+  let value = field === "location" ? trip.location : trip.detail || ""
 
   const input = document.createElement("input")
   input.value = value
@@ -114,12 +115,10 @@ function makeEditable(el, trip){
   el.appendChild(input)
 
   input.focus()
-  input.select()
 
   async function save(){
 
     if(!input.value){
-      alert("不能為空")
       loadTrips()
       return
     }
@@ -131,134 +130,129 @@ function makeEditable(el, trip){
       detail: field === "detail" ? input.value : trip.detail
     }
 
-    try {
-      await fetch(API + "/trips/" + trip.id, {
-        method:"PUT",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify(updateData)
-      })
-      loadTrips()
-    } catch(err){
-      console.error(err)
-      alert("更新失敗")
-      loadTrips()
-    }
+    await fetch(API + "/trips/" + trip.id, {
+      method:"PUT",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(updateData)
+    })
+
+    loadTrips()
   }
 
   input.addEventListener("keydown", e=>{
     if(e.key==="Enter") save()
-    if(e.key==="Escape") loadTrips()
   })
 
   input.addEventListener("blur", save)
 }
 
-
 /* -----------------------
-   載入行程（含海拔）
+   載入行程（不卡UI版🔥）
 ----------------------- */
 async function loadTrips(){
 
-  try {
+  const res = await fetch(API + "/trips")
+  let trips = await res.json()
 
-    const res = await fetch(API + "/trips")
-    let trips = await res.json()
+  trips.sort((a,b)=> a.day - b.day)
 
-    trips.sort((a,b)=> a.day - b.day)
+  const container = document.getElementById("tripList")
+  container.innerHTML = ""
 
-    const container = document.getElementById("tripList")
-    container.innerHTML = ""
+  clearMap()
 
-    clearMap()
+  let currentDay = null
+  let dayContainer
+  let routeCoords = []
 
-    let currentDay = null
-    let dayContainer
-    let routeCoords = []
+  for(const trip of trips){
 
-    for(const trip of trips){
+    if(trip.day !== currentDay){
 
-      if(trip.day !== currentDay){
+      currentDay = trip.day
 
-        currentDay = trip.day
+      const dayBlock = document.createElement("div")
+      dayBlock.className = "day-group"
+      dayBlock.innerHTML = `<h3>Day ${currentDay}</h3>`
 
-        const dayBlock = document.createElement("div")
-        dayBlock.className = "day-group"
+      dayContainer = document.createElement("div")
+      dayContainer.className = "day-items"
 
-        dayBlock.innerHTML = `<h3>Day ${currentDay}</h3>`
+      dayBlock.appendChild(dayContainer)
+      container.appendChild(dayBlock)
 
-        dayContainer = document.createElement("div")
-        dayContainer.className = "day-items"
+      new Sortable(dayContainer, { animation: 150 })
+    }
 
-        dayBlock.appendChild(dayContainer)
-        container.appendChild(dayBlock)
+    // ⭐ 先 render UI
+    const card = document.createElement("div")
+    card.className = "trip-card"
 
-        new Sortable(dayContainer, { animation: 150 })
-      }
+    card.innerHTML = `
+      <div class="trip-info">
 
-      const coords = await getCoords(trip.location)
-
-      let elevation = null
-
-      if(coords){
-        elevation = await getElevation(coords[0], coords[1])
-      }
-
-      const card = document.createElement("div")
-      card.className = "trip-card"
-
-      card.innerHTML = `
-        <div class="trip-info">
-
-          <div class="editable" data-field="location">
-            📍 ${trip.location} ${elevation ? `⛰ ${elevation}m` : ""}
-          </div>
-
-          <div class="editable" data-field="detail">
-            ${formatDate(trip.date)} | ${trip.detail || ""}
-          </div>
-
+        <div class="editable" data-field="location">
+          📍 ${trip.location}
+          <span class="elevation">⛰ loading...</span>
         </div>
 
-        <button class="delete-btn" onclick="deleteTrip(${trip.id})">
-          Delete
-        </button>
-      `
+        <div class="editable" data-field="detail">
+          ${formatDate(trip.date)} | ${trip.detail || ""}
+        </div>
 
-      card.querySelectorAll(".editable").forEach(el=>{
-        el.addEventListener("click", ()=> makeEditable(el, trip))
-      })
+      </div>
 
-      dayContainer.appendChild(card)
+      <button class="delete-btn" onclick="deleteTrip(${trip.id})">
+        Delete
+      </button>
+    `
 
-      if(coords){
+    dayContainer.appendChild(card)
 
-        routeCoords.push(coords)
+    card.querySelectorAll(".editable").forEach(el=>{
+      el.addEventListener("click", ()=> makeEditable(el, trip))
+    })
+
+    // ⭐ 非同步取得資料（不卡UI）
+    getCoords(trip.location).then(coords => {
+
+      if(!coords){
+        card.querySelector(".elevation").textContent = "⛰ N/A"
+        return
+      }
+
+      routeCoords.push(coords)
+
+      getElevation(coords[0], coords[1]).then(elevation => {
+
+        const el = card.querySelector(".elevation")
+
+        if(el){
+          el.textContent = elevation !== null
+            ? `⛰ ${elevation}m`
+            : "⛰ N/A"
+        }
 
         const marker = L.marker(coords)
           .addTo(map)
           .bindPopup(`
             <b>${trip.location}</b><br>
-            ⛰ ${elevation ? elevation + " m" : "N/A"}
+            ⛰ ${elevation ?? "N/A"} m
           `)
 
         markers.push(marker)
-      }
-    }
 
-    if(routeCoords.length > 1){
-      polyline = L.polyline(routeCoords, { color: 'blue' }).addTo(map)
-      map.fitBounds(polyline.getBounds())
-    }
-
-  } catch(err){
-    console.error(err)
-    alert("載入行程失敗")
+        if(routeCoords.length > 1){
+          if(polyline) map.removeLayer(polyline)
+          polyline = L.polyline(routeCoords).addTo(map)
+        }
+      })
+    })
   }
 }
 
-
 /* -----------------------
-   新增行程
+   新增 / 刪除
 ----------------------- */
 async function addTrip(){
 
@@ -267,133 +261,76 @@ async function addTrip(){
   const location = document.getElementById("location").value
   const detail = document.getElementById("detail").value
 
-  if(!date || !day || !location){
-    alert("請填完整資料")
-    return
-  }
+  if(!date || !day || !location) return
 
-  if (isNaN(day) || day <= 0){
-    alert("Day 必須是正整數")
-    return
-  }
+  await fetch(API + "/trips", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ date, day, location, detail })
+  })
 
-  try {
-    await fetch(API + "/trips", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ date, day, location, detail })
-    })
-
-    document.getElementById("date").value = ""
-    document.getElementById("day").value = ""
-    document.getElementById("location").value = ""
-    document.getElementById("detail").value = ""
-
-    loadTrips()
-
-  } catch(err){
-    console.error(err)
-    alert("新增失敗")
-  }
+  loadTrips()
 }
 
+async function deleteTrip(id){
+  await fetch(API + "/trips/" + id, { method:"DELETE" })
+  loadTrips()
+}
 
 /* -----------------------
-   刪除行程
+   留言系統
 ----------------------- */
-async function deleteTrip(id){
-
-  if(!confirm("確定刪除？")) return
-
-  try {
-    await fetch(API + "/trips/" + id, {
-      method:"DELETE"
-    })
-    loadTrips()
-  } catch(err){
-    console.error(err)
-    alert("刪除失敗")
-  }
-}
-
-
-/* =======================
-   💬 留言系統
-======================= */
-
 async function loadComments(){
 
-  try {
+  const res = await fetch(API + "/comments")
+  const comments = await res.json()
 
-    const res = await fetch(API + "/comments")
-    const comments = await res.json()
+  const list = document.getElementById("commentList")
+  list.innerHTML = ""
 
-    const list = document.getElementById("commentList")
-    list.innerHTML = ""
+  comments.forEach(c=>{
+    const div = document.createElement("div")
+    div.className = "comment-item"
 
-    comments.forEach(c => {
+    div.innerHTML = `
+      <div>
+        <strong>${c.username}</strong>
+        (${timeAgo(c.created_at)})
+        <span onclick="deleteComment(${c.id})">❌</span>
+      </div>
+      <div>${c.text}</div>
+    `
 
-      const div = document.createElement("div")
-      div.className = "comment-item"
-
-      div.innerHTML = `
-        <div class="comment-header">
-          <strong>${c.username}</strong>
-          <span class="comment-time">${timeAgo(c.created_at)}</span>
-          <span class="comment-delete" onclick="deleteComment(${c.id})">Delete</span>
-        </div>
-        <div class="comment-text">${c.text}</div>
-      `
-
-      list.appendChild(div)
-    })
-
-  } catch(err){
-    console.error(err)
-  }
+    list.appendChild(div)
+  })
 }
-
 
 async function addComment(){
 
   const username = document.getElementById("username").value
   const text = document.getElementById("commentInput").value
 
-  if(!username || !text){
-    alert("請輸入名稱與留言")
-    return
-  }
+  if(!username || !text) return
 
   await fetch(API + "/comments", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ username, text })
+    body:JSON.stringify({ username, text })
   })
 
   document.getElementById("commentInput").value = ""
-
   loadComments()
 }
-
 
 async function deleteComment(id){
-
-  if(!confirm("刪除留言？")) return
-
-  await fetch(API + "/comments/" + id, {
-    method:"DELETE"
-  })
-
+  await fetch(API + "/comments/" + id, { method:"DELETE" })
   loadComments()
 }
 
-
 /* -----------------------
-   初始化
+   Init
 ----------------------- */
-
 initMap()
 loadTrips()
 loadComments()
-
 setInterval(loadComments, 3000)
