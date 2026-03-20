@@ -11,9 +11,23 @@ function formatDate(dateString){
   return dateString?.split("T")[0] || ""
 }
 
+/* -----------------------
+   時間格式（留言）
+----------------------- */
+function timeAgo(timestamp){
+
+  const diff = Math.floor((new Date() - new Date(timestamp)) / 1000)
+
+  if(diff < 60) return "just now"
+  if(diff < 3600) return Math.floor(diff/60) + " min ago"
+  if(diff < 86400) return Math.floor(diff/3600) + " hr ago"
+
+  return Math.floor(diff/86400) + " days ago"
+}
+
 
 /* -----------------------
-   初始化地圖
+   地圖初始化
 ----------------------- */
 function initMap(){
 
@@ -22,7 +36,6 @@ function initMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap'
   }).addTo(map)
-
 }
 
 function clearMap(){
@@ -36,18 +49,23 @@ function clearMap(){
 
 
 /* -----------------------
-   Geocode
+   地點轉座標
 ----------------------- */
 async function getCoords(location){
 
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
-  )
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
+    )
 
-  const data = await res.json()
+    const data = await res.json()
 
-  if(data.length > 0){
-    return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+    if(data.length > 0){
+      return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+    }
+
+  } catch(err){
+    console.error("Geocode error:", err)
   }
 
   return null
@@ -55,22 +73,17 @@ async function getCoords(location){
 
 
 /* -----------------------
-   Inline Edit
+   Inline 編輯
 ----------------------- */
 function makeEditable(el, trip){
 
   if(el.querySelector("input")) return
 
   let field = el.dataset.field
-  let value = el.textContent
+  let value = ""
 
-  if(field === "location"){
-    value = trip.location
-  }
-
-  if(field === "detail"){
-    value = trip.detail || ""
-  }
+  if(field === "location") value = trip.location
+  if(field === "detail") value = trip.detail || ""
 
   const input = document.createElement("input")
   input.value = value
@@ -80,8 +93,15 @@ function makeEditable(el, trip){
   el.appendChild(input)
 
   input.focus()
+  input.select()
 
   async function save(){
+
+    if(!input.value){
+      alert("不能為空")
+      loadTrips()
+      return
+    }
 
     const updateData = {
       date: trip.date,
@@ -90,17 +110,23 @@ function makeEditable(el, trip){
       detail: field === "detail" ? input.value : trip.detail
     }
 
-    await fetch(API + "/trips/" + trip.id, {
-      method:"PUT",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify(updateData)
-    })
-
-    loadTrips()
+    try {
+      await fetch(API + "/trips/" + trip.id, {
+        method:"PUT",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify(updateData)
+      })
+      loadTrips()
+    } catch(err){
+      console.error(err)
+      alert("更新失敗")
+      loadTrips()
+    }
   }
 
   input.addEventListener("keydown", e=>{
     if(e.key==="Enter") save()
+    if(e.key==="Escape") loadTrips()
   })
 
   input.addEventListener("blur", save)
@@ -112,100 +138,103 @@ function makeEditable(el, trip){
 ----------------------- */
 async function loadTrips(){
 
-  const res = await fetch(API + "/trips")
-  let trips = await res.json()
+  try {
 
-  // ⭐ 排序（Day）
-  trips.sort((a,b)=> a.day - b.day)
+    const res = await fetch(API + "/trips")
+    let trips = await res.json()
 
-  const container = document.getElementById("tripList")
-  container.innerHTML = ""
+    trips.sort((a,b)=> a.day - b.day)
 
-  clearMap()
+    const container = document.getElementById("tripList")
+    container.innerHTML = ""
 
-  let currentDay = null
-  let dayContainer
+    clearMap()
 
-  let routeCoords = []
+    let currentDay = null
+    let dayContainer
+    let routeCoords = []
 
-  for(const trip of trips){
+    for(const trip of trips){
 
-    // Day 分組
-    if(trip.day !== currentDay){
+      if(trip.day !== currentDay){
 
-      currentDay = trip.day
+        currentDay = trip.day
 
-      const dayBlock = document.createElement("div")
-      dayBlock.className = "day-group"
+        const dayBlock = document.createElement("div")
+        dayBlock.className = "day-group"
 
-      dayBlock.innerHTML = `<h3>Day ${currentDay}</h3>`
+        dayBlock.innerHTML = `<h3>Day ${currentDay}</h3>`
 
-      dayContainer = document.createElement("div")
-      dayContainer.className = "day-items"
+        dayContainer = document.createElement("div")
+        dayContainer.className = "day-items"
 
-      dayBlock.appendChild(dayContainer)
-      container.appendChild(dayBlock)
+        dayBlock.appendChild(dayContainer)
+        container.appendChild(dayBlock)
 
-      // ⭐ 啟用拖曳
-      new Sortable(dayContainer, {
-        animation: 150
+        // 拖曳
+        new Sortable(dayContainer, {
+          animation: 150
+        })
+      }
+
+      const card = document.createElement("div")
+      card.className = "trip-card"
+
+      card.innerHTML = `
+        <div class="trip-info">
+
+          <div class="editable" data-field="location">
+            📍 ${trip.location}
+          </div>
+
+          <div class="editable" data-field="detail">
+            ${formatDate(trip.date)} | ${trip.detail || ""}
+          </div>
+
+        </div>
+
+        <button class="delete-btn" onclick="deleteTrip(${trip.id})">
+          Delete
+        </button>
+      `
+
+      // inline edit
+      card.querySelectorAll(".editable").forEach(el=>{
+        el.addEventListener("click", ()=> makeEditable(el, trip))
       })
+
+      dayContainer.appendChild(card)
+
+      // 地圖
+      const coords = await getCoords(trip.location)
+
+      if(coords){
+
+        routeCoords.push(coords)
+
+        const marker = L.marker(coords)
+          .addTo(map)
+          .bindPopup(`<b>${trip.location}</b>`)
+
+        markers.push(marker)
+      }
     }
 
-    // 卡片
-    const card = document.createElement("div")
-    card.className = "trip-card"
-
-    card.innerHTML = `
-      <div class="trip-info">
-
-        <div class="editable" data-field="location">
-          📍 ${trip.location}
-        </div>
-
-        <div class="editable" data-field="detail">
-          ${formatDate(trip.date)} | ${trip.detail || ""}
-        </div>
-
-      </div>
-
-      <button class="delete-btn" onclick="deleteTrip(${trip.id})">
-        Delete
-      </button>
-    `
-
-    // inline edit
-    card.querySelectorAll(".editable").forEach(el=>{
-      el.addEventListener("click", ()=> makeEditable(el, trip))
-    })
-
-    dayContainer.appendChild(card)
-
-    // 地圖
-    const coords = await getCoords(trip.location)
-
-    if(coords){
-
-      routeCoords.push(coords)
-
-      const marker = L.marker(coords)
-        .addTo(map)
-        .bindPopup(`<b>${trip.location}</b>`)
-
-      markers.push(marker)
+    // 畫路線
+    if(routeCoords.length > 1){
+      polyline = L.polyline(routeCoords, { color: 'blue' }).addTo(map)
+      map.fitBounds(polyline.getBounds())
     }
-  }
 
-  // ⭐ 畫路線
-  if(routeCoords.length > 1){
-    polyline = L.polyline(routeCoords, { color: 'blue' }).addTo(map)
-    map.fitBounds(polyline.getBounds())
+  } catch(err){
+    console.error(err)
+    alert("載入行程失敗")
   }
 }
 
 
 /* -----------------------
-   新增
+   新增行程
 ----------------------- */
 async function addTrip(){
 
@@ -215,37 +244,148 @@ async function addTrip(){
   const detail = document.getElementById("detail").value
 
   if(!date || !day || !location){
-    alert("請填完整")
+    alert("請填完整資料")
     return
   }
 
-  await fetch(API + "/trips", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({ date, day, location, detail })
-  })
+  if (isNaN(day) || day <= 0){
+    alert("Day 必須是正整數")
+    return
+  }
 
-  loadTrips()
+  try {
+    await fetch(API + "/trips", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ date, day, location, detail })
+    })
+
+    document.getElementById("date").value = ""
+    document.getElementById("day").value = ""
+    document.getElementById("location").value = ""
+    document.getElementById("detail").value = ""
+
+    loadTrips()
+
+  } catch(err){
+    console.error(err)
+    alert("新增失敗")
+  }
 }
 
 
 /* -----------------------
-   刪除
+   刪除行程
 ----------------------- */
 async function deleteTrip(id){
 
   if(!confirm("確定刪除？")) return
 
-  await fetch(API + "/trips/" + id, {
-    method:"DELETE"
-  })
+  try {
+    await fetch(API + "/trips/" + id, {
+      method:"DELETE"
+    })
+    loadTrips()
+  } catch(err){
+    console.error(err)
+    alert("刪除失敗")
+  }
+}
 
-  loadTrips()
+
+/* =======================
+   💬 留言系統
+======================= */
+
+/* 載入留言 */
+async function loadComments(){
+
+  try {
+
+    const res = await fetch(API + "/comments")
+    const comments = await res.json()
+
+    const list = document.getElementById("commentList")
+    list.innerHTML = ""
+
+    comments.forEach(c => {
+
+      const div = document.createElement("div")
+      div.className = "comment-item"
+
+      div.innerHTML = `
+        <div class="comment-header">
+          <strong>${c.username}</strong>
+          <span class="comment-time">${timeAgo(c.created_at)}</span>
+          <span class="comment-delete" onclick="deleteComment(${c.id})">Delete</span>
+        </div>
+        <div class="comment-text">${c.text}</div>
+      `
+
+      list.appendChild(div)
+    })
+
+  } catch(err){
+    console.error(err)
+  }
+}
+
+
+/* 新增留言 */
+async function addComment(){
+
+  const username = document.getElementById("username").value
+  const text = document.getElementById("commentInput").value
+
+  if(!username || !text){
+    alert("請輸入名稱與留言")
+    return
+  }
+
+  try {
+
+    await fetch(API + "/comments", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ username, text })
+    })
+
+    document.getElementById("commentInput").value = ""
+
+    loadComments()
+
+  } catch(err){
+    console.error(err)
+  }
+}
+
+
+/* 刪除留言 */
+async function deleteComment(id){
+
+  if(!confirm("刪除留言？")) return
+
+  try {
+
+    await fetch(API + "/comments/" + id, {
+      method:"DELETE"
+    })
+
+    loadComments()
+
+  } catch(err){
+    console.error(err)
+  }
 }
 
 
 /* -----------------------
-   Init
+   初始化
 ----------------------- */
+
 initMap()
 loadTrips()
+loadComments()
+
+// ⭐ 即時更新（每3秒）
+setInterval(loadComments, 3000)
