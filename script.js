@@ -1,166 +1,97 @@
 const API = "https://dreamtheater.onrender.com"
 
-// 當前編輯的 trip id
-let editingTripId = null
+let map
+let markers = []
 
 /* -----------------------
-   Load Trips
+   Init Map
+----------------------- */
+
+function initMap(){
+
+  map = L.map('map').setView([25.0330, 121.5654], 5)
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map)
+
+}
+
+function clearMarkers(){
+  markers.forEach(m => map.removeLayer(m))
+  markers = []
+}
+
+/* -----------------------
+   Geocode（簡單版）
+----------------------- */
+
+async function getCoords(location){
+
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
+  )
+
+  const data = await res.json()
+
+  if(data.length > 0){
+    return [data[0].lat, data[0].lon]
+  }
+
+  return null
+}
+
+/* -----------------------
+   Load Trips（卡片版）
 ----------------------- */
 
 async function loadTrips(){
 
-  try {
+  const res = await fetch(API + "/trips")
+  const trips = await res.json()
 
-    const res = await fetch(API + "/trips")
-    const trips = await res.json()
+  const container = document.getElementById("tripList")
+  container.innerHTML = ""
 
-    const table = document.getElementById("tripList")
-    table.innerHTML = ""
+  clearMarkers()
 
-    if(trips.length === 0){
-      table.innerHTML = `<tr><td colspan="5">No trips yet ✈️</td></tr>`
-      return
+  for(const trip of trips){
+
+    // 建立卡片
+    const card = document.createElement("div")
+    card.className = "trip-card"
+
+    card.innerHTML = `
+      <div class="trip-info">
+        <div class="trip-title">
+          Day ${trip.day} - ${trip.location}
+        </div>
+        <div class="trip-detail">
+          ${trip.date} | ${trip.detail || ""}
+        </div>
+      </div>
+
+      <div class="trip-actions">
+        <button onclick="deleteTrip(${trip.id})">Delete</button>
+      </div>
+    `
+
+    container.appendChild(card)
+
+    // 加到地圖
+    const coords = await getCoords(trip.location)
+
+    if(coords){
+      const marker = L.marker(coords)
+        .addTo(map)
+        .bindPopup(`<b>${trip.location}</b><br>${trip.detail}`)
+
+      markers.push(marker)
     }
 
-    trips.forEach(trip => {
-
-      const row = document.createElement("tr")
-      row.dataset.tripId = trip.id
-
-      row.innerHTML = `
-        <td class="editable" data-field="date">${trip.date}</td>
-        <td class="editable" data-field="day">Day ${trip.day}</td>
-        <td class="editable" data-field="location">${trip.location}</td>
-        <td class="editable" data-field="detail">${trip.detail || ""}</td>
-        <td>
-          <button class="delete-btn" onclick="deleteTrip(${trip.id})">
-            Delete
-          </button>
-        </td>
-      `
-
-      // 綁定 editable
-      const editableCells = row.querySelectorAll(".editable")
-
-      editableCells.forEach(cell => {
-        cell.addEventListener("click", function() {
-          makeEditable(this, trip)
-        })
-      })
-
-      table.appendChild(row)
-
-    })
-
-  } catch(err){
-    console.error(err)
-    alert("讀取資料失敗")
   }
 
 }
-
-
-/* -----------------------
-   Inline Edit
------------------------ */
-
-function makeEditable(cell, trip) {
-
-  if (editingTripId !== null && editingTripId !== trip.id) return
-  if (cell.querySelector("input")) return
-
-  const field = cell.dataset.field
-  let currentValue = cell.textContent
-
-  if (field === "day") {
-    currentValue = currentValue.replace("Day ", "")
-  }
-
-  const input = document.createElement("input")
-  input.type = field === "date" ? "date" : "text"
-  input.value = currentValue
-  input.style.width = "100%"
-
-  cell.textContent = ""
-  cell.appendChild(input)
-
-  input.focus()
-  input.select()
-
-  editingTripId = trip.id
-
-  async function saveEdit() {
-
-    const newValue = input.value
-
-    if (!newValue) {
-      alert("欄位不能為空！")
-      return
-    }
-
-    if (field === "day") {
-      if (isNaN(newValue) || newValue <= 0 || !Number.isInteger(Number(newValue))) {
-        alert("Day 必須是正整數！")
-        return
-      }
-    }
-
-    if (field === "location") {
-      if (newValue.length < 2) {
-        alert("Location 至少需要 2 個字元！")
-        return
-      }
-    }
-
-    const updateData = {
-      date: field === "date" ? newValue : trip.date,
-      day: field === "day" ? newValue : trip.day,
-      location: field === "location" ? newValue : trip.location,
-      detail: field === "detail" ? newValue : trip.detail
-    }
-
-    try {
-
-      const response = await fetch(API + "/trips/" + trip.id, {
-        method: "PUT",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify(updateData)
-      })
-
-      if (!response.ok) throw new Error()
-
-      editingTripId = null
-      loadTrips()
-
-    } catch (err) {
-
-      console.error(err)
-      alert("更新失敗")
-      editingTripId = null
-      loadTrips()
-
-    }
-
-  }
-
-  function cancelEdit() {
-    editingTripId = null
-    loadTrips()
-  }
-
-  input.addEventListener("keydown", function(e) {
-
-    if (e.key === "Enter") saveEdit()
-    if (e.key === "Escape") cancelEdit()
-
-  })
-
-  input.addEventListener("blur", function() {
-    if (editingTripId === trip.id) saveEdit()
-  })
-
-}
-
 
 /* -----------------------
    Add Trip
@@ -173,46 +104,20 @@ async function addTrip(){
   const location = document.getElementById("location").value
   const detail = document.getElementById("detail").value
 
-  if (!date || !day || !location || !detail) {
-    alert("有欄位漏掉了！")
+  if(!date || !day || !location){
+    alert("請填寫完整")
     return
   }
 
-  if (isNaN(day) || day <= 0 || !Number.isInteger(Number(day))) {
-    alert("Day 必須是正整數！")
-    return
-  }
+  await fetch(API + "/trips", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ date, day, location, detail })
+  })
 
-  if (location.length < 2) {
-    alert("Location 至少需要 2 個字元！")
-    return
-  }
-
-  try {
-
-    await fetch(API + "/trips", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ date, day, location, detail })
-    })
-
-    loadTrips()
-
-    // 清空欄位（UX升級）
-    document.getElementById("date").value = ""
-    document.getElementById("day").value = ""
-    document.getElementById("location").value = ""
-    document.getElementById("detail").value = ""
-
-  } catch(err){
-
-    console.error(err)
-    alert("新增失敗")
-
-  }
+  loadTrips()
 
 }
-
 
 /* -----------------------
    Delete
@@ -220,30 +125,17 @@ async function addTrip(){
 
 async function deleteTrip(id){
 
-  const confirmDelete = confirm("確定要刪除這筆行程嗎？")
+  await fetch(API + "/trips/" + id, {
+    method:"DELETE"
+  })
 
-  if(!confirmDelete) return
-
-  try {
-
-    await fetch(API + "/trips/" + id, {
-      method:"DELETE"
-    })
-
-    loadTrips()
-
-  } catch(err){
-
-    console.error(err)
-    alert("刪除失敗")
-
-  }
+  loadTrips()
 
 }
-
 
 /* -----------------------
    Init
 ----------------------- */
 
+initMap()
 loadTrips()
