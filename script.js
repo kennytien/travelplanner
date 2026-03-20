@@ -2,13 +2,13 @@ const API = "https://dreamtheater.onrender.com"
 
 let map
 let markers = []
+let polyline
 
 /* -----------------------
-   日期格式化
+   日期格式
 ----------------------- */
 function formatDate(dateString){
-  if(!dateString) return ""
-  return dateString.split("T")[0]
+  return dateString?.split("T")[0] || ""
 }
 
 
@@ -25,30 +25,29 @@ function initMap(){
 
 }
 
-function clearMarkers(){
+function clearMap(){
   markers.forEach(m => map.removeLayer(m))
   markers = []
+
+  if(polyline){
+    map.removeLayer(polyline)
+  }
 }
 
 
 /* -----------------------
-   地點轉座標
+   Geocode
 ----------------------- */
 async function getCoords(location){
 
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
-    )
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
+  )
 
-    const data = await res.json()
+  const data = await res.json()
 
-    if(data.length > 0){
-      return [data[0].lat, data[0].lon]
-    }
-
-  } catch(err){
-    console.error("Geocode error:", err)
+  if(data.length > 0){
+    return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
   }
 
   return null
@@ -56,22 +55,19 @@ async function getCoords(location){
 
 
 /* -----------------------
-   卡片 inline edit ⭐
+   Inline Edit
 ----------------------- */
-function makeCardEditable(element, trip){
+function makeEditable(el, trip){
 
-  if(element.querySelector("input")) return
+  if(el.querySelector("input")) return
 
-  let field = element.dataset.field
-  let value = element.textContent
+  let field = el.dataset.field
+  let value = el.textContent
 
-  // title → location
-  if(field === "title"){
+  if(field === "location"){
     value = trip.location
-    field = "location"
   }
 
-  // detail 要去掉日期
   if(field === "detail"){
     value = trip.detail || ""
   }
@@ -80,50 +76,31 @@ function makeCardEditable(element, trip){
   input.value = value
   input.style.width = "100%"
 
-  element.innerHTML = ""
-  element.appendChild(input)
+  el.innerHTML = ""
+  el.appendChild(input)
 
   input.focus()
-  input.select()
 
   async function save(){
-
-    const newValue = input.value
-
-    if(!newValue){
-      alert("欄位不能為空")
-      return
-    }
 
     const updateData = {
       date: trip.date,
       day: trip.day,
-      location: field === "location" ? newValue : trip.location,
-      detail: field === "detail" ? newValue : trip.detail
+      location: field === "location" ? input.value : trip.location,
+      detail: field === "detail" ? input.value : trip.detail
     }
 
-    try {
+    await fetch(API + "/trips/" + trip.id, {
+      method:"PUT",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(updateData)
+    })
 
-      const res = await fetch(API + "/trips/" + trip.id, {
-        method:"PUT",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify(updateData)
-      })
-
-      if(!res.ok) throw new Error()
-
-      loadTrips()
-
-    } catch(err){
-      console.error(err)
-      alert("更新失敗")
-      loadTrips()
-    }
+    loadTrips()
   }
 
-  input.addEventListener("keydown", e => {
-    if(e.key === "Enter") save()
-    if(e.key === "Escape") loadTrips()
+  input.addEventListener("keydown", e=>{
+    if(e.key==="Enter") save()
   })
 
   input.addEventListener("blur", save)
@@ -131,91 +108,104 @@ function makeCardEditable(element, trip){
 
 
 /* -----------------------
-   載入行程（卡片）
+   載入行程（最終版）
 ----------------------- */
 async function loadTrips(){
 
-  try {
+  const res = await fetch(API + "/trips")
+  let trips = await res.json()
 
-    const res = await fetch(API + "/trips")
-    const trips = await res.json()
+  // ⭐ 排序（Day）
+  trips.sort((a,b)=> a.day - b.day)
 
-    const container = document.getElementById("tripList")
-    container.innerHTML = ""
+  const container = document.getElementById("tripList")
+  container.innerHTML = ""
 
-    clearMarkers()
+  clearMap()
 
-    if(trips.length === 0){
-      container.innerHTML = `<div class="empty-state">No trips yet ✈️</div>`
-      return
-    }
+  let currentDay = null
+  let dayContainer
 
-    for(const trip of trips){
+  let routeCoords = []
 
-      const card = document.createElement("div")
-      card.className = "trip-card"
+  for(const trip of trips){
 
-      card.innerHTML = `
-        <div class="trip-info">
+    // Day 分組
+    if(trip.day !== currentDay){
 
-          <div class="trip-title editable" data-field="title">
-            Day ${trip.day} - ${trip.location}
-          </div>
+      currentDay = trip.day
 
-          <div class="trip-detail editable" data-field="detail">
-            ${formatDate(trip.date)} | ${trip.detail || ""}
-          </div>
+      const dayBlock = document.createElement("div")
+      dayBlock.className = "day-group"
 
-        </div>
+      dayBlock.innerHTML = `<h3>Day ${currentDay}</h3>`
 
-        <div class="trip-actions">
-          <button class="delete-btn" onclick="deleteTrip(${trip.id})">
-            Delete
-          </button>
-        </div>
-      `
+      dayContainer = document.createElement("div")
+      dayContainer.className = "day-items"
 
-      // ⭐ 綁定 inline edit
-      const editables = card.querySelectorAll(".editable")
-      editables.forEach(el => {
-        el.addEventListener("click", () => {
-          makeCardEditable(el, trip)
-        })
+      dayBlock.appendChild(dayContainer)
+      container.appendChild(dayBlock)
+
+      // ⭐ 啟用拖曳
+      new Sortable(dayContainer, {
+        animation: 150
       })
-
-      container.appendChild(card)
-
-      // ⭐ 地圖 marker
-      const coords = await getCoords(trip.location)
-
-      if(coords){
-
-        const marker = L.marker(coords)
-          .addTo(map)
-          .bindPopup(`
-            <b>${trip.location}</b><br>
-            Day ${trip.day}<br>
-            ${formatDate(trip.date)}<br>
-            ${trip.detail || ""}
-          `)
-
-        markers.push(marker)
-      }
-
     }
 
-  } catch(err){
+    // 卡片
+    const card = document.createElement("div")
+    card.className = "trip-card"
 
-    console.error(err)
-    alert("載入資料失敗")
+    card.innerHTML = `
+      <div class="trip-info">
 
+        <div class="editable" data-field="location">
+          📍 ${trip.location}
+        </div>
+
+        <div class="editable" data-field="detail">
+          ${formatDate(trip.date)} | ${trip.detail || ""}
+        </div>
+
+      </div>
+
+      <button class="delete-btn" onclick="deleteTrip(${trip.id})">
+        Delete
+      </button>
+    `
+
+    // inline edit
+    card.querySelectorAll(".editable").forEach(el=>{
+      el.addEventListener("click", ()=> makeEditable(el, trip))
+    })
+
+    dayContainer.appendChild(card)
+
+    // 地圖
+    const coords = await getCoords(trip.location)
+
+    if(coords){
+
+      routeCoords.push(coords)
+
+      const marker = L.marker(coords)
+        .addTo(map)
+        .bindPopup(`<b>${trip.location}</b>`)
+
+      markers.push(marker)
+    }
   }
 
+  // ⭐ 畫路線
+  if(routeCoords.length > 1){
+    polyline = L.polyline(routeCoords, { color: 'blue' }).addTo(map)
+    map.fitBounds(polyline.getBounds())
+  }
 }
 
 
 /* -----------------------
-   新增行程
+   新增
 ----------------------- */
 async function addTrip(){
 
@@ -225,70 +215,37 @@ async function addTrip(){
   const detail = document.getElementById("detail").value
 
   if(!date || !day || !location){
-    alert("請填寫完整資料")
+    alert("請填完整")
     return
   }
 
-  if (isNaN(day) || day <= 0 || !Number.isInteger(Number(day))) {
-    alert("Day 必須是正整數")
-    return
-  }
+  await fetch(API + "/trips", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ date, day, location, detail })
+  })
 
-  try {
-
-    await fetch(API + "/trips", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ date, day, location, detail })
-    })
-
-    // 清空欄位
-    document.getElementById("date").value = ""
-    document.getElementById("day").value = ""
-    document.getElementById("location").value = ""
-    document.getElementById("detail").value = ""
-
-    loadTrips()
-
-  } catch(err){
-
-    console.error(err)
-    alert("新增失敗")
-
-  }
-
+  loadTrips()
 }
 
 
 /* -----------------------
-   刪除行程
+   刪除
 ----------------------- */
 async function deleteTrip(id){
 
-  const confirmDelete = confirm("確定要刪除這筆行程嗎？")
+  if(!confirm("確定刪除？")) return
 
-  if(!confirmDelete) return
+  await fetch(API + "/trips/" + id, {
+    method:"DELETE"
+  })
 
-  try {
-
-    await fetch(API + "/trips/" + id, {
-      method:"DELETE"
-    })
-
-    loadTrips()
-
-  } catch(err){
-
-    console.error(err)
-    alert("刪除失敗")
-
-  }
-
+  loadTrips()
 }
 
 
 /* -----------------------
-   初始化
+   Init
 ----------------------- */
 initMap()
 loadTrips()
