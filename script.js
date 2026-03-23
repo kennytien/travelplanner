@@ -45,6 +45,59 @@ function clearMap(){
 }
 
 /* -----------------------
+   Geocode
+----------------------- */
+async function getCoords(location){
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
+    )
+
+    const data = await res.json()
+
+    if(data.length > 0){
+      return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+    }
+  } catch(err){
+    console.error("Geocode error:", err)
+  }
+
+  return null
+}
+
+/* -----------------------
+   Elevation（穩定版）
+----------------------- */
+async function getElevation(lat, lon){
+  try {
+
+    const res = await fetch(
+      `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`
+    )
+
+    if(!res.ok){
+      console.warn("Elevation API failed:", res.status)
+      return null
+    }
+
+    const text = await res.text()
+
+    if(text.startsWith("<")){
+      console.warn("Elevation returned HTML")
+      return null
+    }
+
+    const data = JSON.parse(text)
+
+    return data.results?.[0]?.elevation ?? null
+
+  } catch(err){
+    console.error("Elevation error:", err)
+    return null
+  }
+}
+
+/* -----------------------
    Inline 編輯
 ----------------------- */
 function makeEditable(el, trip){
@@ -94,7 +147,7 @@ function makeEditable(el, trip){
 }
 
 /* -----------------------
-   載入行程（DB版本🔥）
+   載入行程（不卡UI版🔥）
 ----------------------- */
 async function loadTrips(){
 
@@ -131,7 +184,7 @@ async function loadTrips(){
       new Sortable(dayContainer, { animation: 150 })
     }
 
-    // ⭐ UI（直接用 DB elevation）
+    // ⭐ 先 render UI
     const card = document.createElement("div")
     card.className = "trip-card"
 
@@ -140,9 +193,7 @@ async function loadTrips(){
 
         <div class="editable" data-field="location">
           📍 ${trip.location}
-          <span class="elevation">
-            ${trip.elevation !== null ? `⛰ ${trip.elevation}m` : "⛰ N/A"}
-          </span>
+          <span class="elevation">⛰ loading...</span>
         </div>
 
         <div class="editable" data-field="detail">
@@ -162,26 +213,41 @@ async function loadTrips(){
       el.addEventListener("click", ()=> makeEditable(el, trip))
     })
 
-    // ⭐ 地圖（直接用 DB 座標）
-    if(trip.latitude && trip.longitude){
+    // ⭐ 非同步取得資料（不卡UI）
+    getCoords(trip.location).then(coords => {
 
-      const coords = [trip.latitude, trip.longitude]
+      if(!coords){
+        card.querySelector(".elevation").textContent = "⛰ N/A"
+        return
+      }
+
       routeCoords.push(coords)
 
-      const marker = L.marker(coords)
-        .addTo(map)
-        .bindPopup(`
-          <b>${trip.location}</b><br>
-          ⛰ ${trip.elevation ?? "N/A"} m
-        `)
+      getElevation(coords[0], coords[1]).then(elevation => {
 
-      markers.push(marker)
+        const el = card.querySelector(".elevation")
 
-      if(routeCoords.length > 1){
-        if(polyline) map.removeLayer(polyline)
-        polyline = L.polyline(routeCoords).addTo(map)
-      }
-    }
+        if(el){
+          el.textContent = elevation !== null
+            ? `⛰ ${elevation}m`
+            : "⛰ N/A"
+        }
+
+        const marker = L.marker(coords)
+          .addTo(map)
+          .bindPopup(`
+            <b>${trip.location}</b><br>
+            ⛰ ${elevation ?? "N/A"} m
+          `)
+
+        markers.push(marker)
+
+        if(routeCoords.length > 1){
+          if(polyline) map.removeLayer(polyline)
+          polyline = L.polyline(routeCoords).addTo(map)
+        }
+      })
+    })
   }
 }
 
