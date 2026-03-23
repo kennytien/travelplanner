@@ -12,10 +12,11 @@ const pool = new Pool({
 })
 
 /* -----------------------
-   建立資料表
+   初始化資料庫（升級版🔥）
 ----------------------- */
 async function initDB(){
 
+  // 建立 trips 表
   await pool.query(`
     CREATE TABLE IF NOT EXISTS trips (
       id SERIAL PRIMARY KEY,
@@ -26,6 +27,23 @@ async function initDB(){
     );
   `)
 
+  // ⭐ 新增欄位（不會重複）
+  await pool.query(`
+    ALTER TABLE trips
+    ADD COLUMN IF NOT EXISTS latitude FLOAT;
+  `)
+
+  await pool.query(`
+    ALTER TABLE trips
+    ADD COLUMN IF NOT EXISTS longitude FLOAT;
+  `)
+
+  await pool.query(`
+    ALTER TABLE trips
+    ADD COLUMN IF NOT EXISTS elevation INTEGER;
+  `)
+
+  // 建立 comments 表
   await pool.query(`
     CREATE TABLE IF NOT EXISTS comments (
       id SERIAL PRIMARY KEY,
@@ -35,6 +53,7 @@ async function initDB(){
     );
   `)
 
+  console.log("✅ DB schema ready")
 }
 
 initDB()
