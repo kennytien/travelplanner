@@ -66,7 +66,7 @@ async function getCoords(location){
 }
 
 /* -----------------------
-   Elevation（穩定版）
+   Elevation
 ----------------------- */
 async function getElevation(lat, lon){
   try {
@@ -98,7 +98,30 @@ async function getElevation(lat, lon){
 }
 
 /* -----------------------
-   Inline 編輯（修改後版）
+   Weather（氣溫、雨量、風速）
+   使用：open-meteo.com（免 key）
+----------------------- */
+async function getWeather(lat, lon) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation,wind_speed_10m&timezone=auto`
+
+    const res = await fetch(url)
+    const data = await res.json()
+
+    const temp = data.hourly.temperature_2m[0]           // °C
+    const rain = data.hourly.precipitation[0]           // mm
+    const wind = data.hourly.wind_speed_10m[0]          // m/s
+
+    return { temp, rain, wind }
+
+  } catch (err) {
+    console.error("Weather error:", err)
+    return { temp: null, rain: null, wind: null }
+  }
+}
+
+/* -----------------------
+   Inline 編輯
 ----------------------- */
 function makeEditable(el, trip){
 
@@ -106,7 +129,6 @@ function makeEditable(el, trip){
 
   let field = el.dataset.field
 
-  // ⭐ 增加 date 欄位讀取
   let value =
     field === "location" ? trip.location :
     field === "date" ? formatDate(trip.date) :
@@ -128,7 +150,6 @@ function makeEditable(el, trip){
       return
     }
 
-    // ⭐ 更新時支援 date
     const updateData = {
       date: field === "date" ? input.value : formatDate(trip.date),
       day: trip.day,
@@ -153,7 +174,7 @@ function makeEditable(el, trip){
 }
 
 /* -----------------------
-   載入行程（不卡UI版🔥）
+   載入行程
 ----------------------- */
 async function loadTrips(){
 
@@ -190,7 +211,6 @@ async function loadTrips(){
       new Sortable(dayContainer, { animation: 150 })
     }
 
-    // ⭐ render UI 加入 date 欄位
     const card = document.createElement("div")
     card.className = "trip-card"
 
@@ -200,6 +220,7 @@ async function loadTrips(){
         <div class="editable" data-field="location">
           📍 ${trip.location}
           <span class="elevation">⛰ loading...</span>
+          <span class="weather">🌤 loading...</span>
         </div>
 
         <div class="editable" data-field="date">
@@ -223,39 +244,52 @@ async function loadTrips(){
       el.addEventListener("click", ()=> makeEditable(el, trip))
     })
 
-    // ⭐ 非同步取得資料（不卡UI）
+    /* -----------------------
+       Geocode → Elevation → Weather
+    ----------------------- */
     getCoords(trip.location).then(coords => {
 
       if(!coords){
         card.querySelector(".elevation").textContent = "⛰ N/A"
+        card.querySelector(".weather").textContent = "🌤 N/A"
         return
       }
 
       routeCoords.push(coords)
 
+      // Elevation
       getElevation(coords[0], coords[1]).then(elevation => {
 
-        const el = card.querySelector(".elevation")
+        card.querySelector(".elevation").textContent =
+          elevation !== null ? `⛰ ${elevation}m` : "⛰ N/A"
 
-        if(el){
-          el.textContent = elevation !== null
-            ? `⛰ ${elevation}m`
-            : "⛰ N/A"
-        }
 
-        const marker = L.marker(coords)
-          .addTo(map)
-          .bindPopup(`
-            <b>${trip.location}</b><br>
-            ⛰ ${elevation ?? "N/A"} m
-          `)
+        // Weather
+        getWeather(coords[0], coords[1]).then(w => {
 
-        markers.push(marker)
+          card.querySelector(".weather").textContent =
+            w.temp !== null
+              ? `🌡 ${w.temp}°C | 🌧 ${w.rain}mm | 💨 ${w.wind}m/s`
+              : "🌤 N/A"
 
-        if(routeCoords.length > 1){
-          if(polyline) map.removeLayer(polyline)
-          polyline = L.polyline(routeCoords).addTo(map)
-        }
+          // Marker & Popup
+          const marker = L.marker(coords)
+            .addTo(map)
+            .bindPopup(`
+              <b>${trip.location}</b><br><br>
+              ⛰ 海拔：${elevation ?? "N/A"} m<br>
+              🌡 氣溫：${w.temp ?? "N/A"} °C<br>
+              🌧 降雨：${w.rain ?? "N/A"} mm<br>
+              💨 風速：${w.wind ?? "N/A"} m/s
+            `)
+
+          markers.push(marker)
+
+          if(routeCoords.length > 1){
+            if(polyline) map.removeLayer(polyline)
+            polyline = L.polyline(routeCoords).addTo(map)
+          }
+        })
       })
     })
   }
