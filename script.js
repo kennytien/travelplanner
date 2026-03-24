@@ -98,14 +98,19 @@ async function getElevation(lat, lon){
 }
 
 /* -----------------------
-   Inline 編輯
+   Inline 編輯（修改後版）
 ----------------------- */
 function makeEditable(el, trip){
 
   if(el.querySelector("input")) return
 
   let field = el.dataset.field
-  let value = field === "location" ? trip.location : trip.detail || ""
+
+  // ⭐ 增加 date 欄位讀取
+  let value =
+    field === "location" ? trip.location :
+    field === "date" ? formatDate(trip.date) :
+    trip.detail || ""
 
   const input = document.createElement("input")
   input.value = value
@@ -123,8 +128,9 @@ function makeEditable(el, trip){
       return
     }
 
+    // ⭐ 更新時支援 date
     const updateData = {
-      date: trip.date,
+      date: field === "date" ? input.value : formatDate(trip.date),
       day: trip.day,
       location: field === "location" ? input.value : trip.location,
       detail: field === "detail" ? input.value : trip.detail
@@ -184,7 +190,7 @@ async function loadTrips(){
       new Sortable(dayContainer, { animation: 150 })
     }
 
-    // ⭐ 先 render UI
+    // ⭐ render UI 加入 date 欄位
     const card = document.createElement("div")
     card.className = "trip-card"
 
@@ -196,8 +202,12 @@ async function loadTrips(){
           <span class="elevation">⛰ loading...</span>
         </div>
 
+        <div class="editable" data-field="date">
+          📅 ${formatDate(trip.date)}
+        </div>
+
         <div class="editable" data-field="detail">
-          ${formatDate(trip.date)} | ${trip.detail || ""}
+          ${trip.detail || ""}
         </div>
 
       </div>
