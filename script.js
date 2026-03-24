@@ -99,21 +99,23 @@ async function getElevation(lat, lon){
 
 /* -----------------------
    Weather（氣溫、雨量、風速）
-   使用：open-meteo.com（免 key）
 ----------------------- */
 async function getWeather(lat, lon) {
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation,wind_speed_10m&timezone=auto`
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${lat}&longitude=${lon}` +
+      `&hourly=temperature_2m,precipitation,wind_speed_10m` +
+      `&timezone=auto`
 
-    const res = await fetch(url)
+    const res = await fetch(url, { cache: "no-store" })
     const data = await res.json()
 
-    const temp = data.hourly.temperature_2m[0]           // °C
-    const rain = data.hourly.precipitation[0]           // mm
-    const wind = data.hourly.wind_speed_10m[0]          // m/s
+    const temp = data.hourly.temperature_2m[0]
+    const rain = data.hourly.precipitation[0]
+    const wind = data.hourly.wind_speed_10m[0]
 
     return { temp, rain, wind }
-
   } catch (err) {
     console.error("Weather error:", err)
     return { temp: null, rain: null, wind: null }
@@ -263,7 +265,6 @@ async function loadTrips(){
         card.querySelector(".elevation").textContent =
           elevation !== null ? `⛰ ${elevation}m` : "⛰ N/A"
 
-
         // Weather
         getWeather(coords[0], coords[1]).then(w => {
 
@@ -283,6 +284,7 @@ async function loadTrips(){
               💨 風速：${w.wind ?? "N/A"} m/s
             `)
 
+          marker._tripId = trip.id   // ⭐綁定 tripId，供天氣自動更新用
           markers.push(marker)
 
           if(routeCoords.length > 1){
@@ -293,6 +295,31 @@ async function loadTrips(){
       })
     })
   }
+}
+
+/* -----------------------
+   ⭐ 每小時更新所有天氣
+----------------------- */
+async function updateWeatherForAllTrips(){
+  console.log("⏳ 更新所有天氣...")
+
+  for (const marker of markers) {
+    if (!marker._latlng || marker._tripId == null) continue
+
+    const { lat, lng } = marker._latlng
+    const cardWeather = document.querySelector(
+      `.trip-card .weather`
+    )
+
+    const w = await getWeather(lat, lng)
+
+    if (w.temp !== null && cardWeather) {
+      cardWeather.textContent =
+        `🌡 ${w.temp}°C | 🌧 ${w.rain}mm | 💨 ${w.wind}m/s`
+    }
+  }
+
+  console.log("✔ 天氣更新完成（每小時）")
 }
 
 /* -----------------------
@@ -378,3 +405,6 @@ initMap()
 loadTrips()
 loadComments()
 setInterval(loadComments, 3000)
+
+// ⭐每 1 小時更新天氣
+setInterval(updateWeatherForAllTrips, 3600000)
