@@ -131,7 +131,7 @@ async function renderDayDistances(dayGroups){
     if(!currentDay.distanceEl) continue
 
     currentDay.distanceEl.textContent =
-      `Calculating Day ${currentDay.day} → Day ${nextDay.day} distance...`
+      `計算 Day ${currentDay.day} 到 Day ${nextDay.day} 距離中...`
 
     const [fromCoords, toCoords] = await Promise.all([
       getCoords(currentDay.endLocation),
@@ -140,13 +140,13 @@ async function renderDayDistances(dayGroups){
 
     if(!fromCoords || !toCoords){
       currentDay.distanceEl.textContent =
-        `Distance to Day ${nextDay.day}: unavailable`
+        `到 Day ${nextDay.day} 的距離：無法取得`
       continue
     }
 
     const distanceKm = calculateDistanceKm(fromCoords, toCoords)
     currentDay.distanceEl.textContent =
-      `Distance to Day ${nextDay.day}: ${distanceKm.toFixed(1)} km`
+      `到 Day ${nextDay.day} 的距離：${distanceKm.toFixed(1)} 公里`
   }
 
   const lastDay = dayGroups[dayGroups.length - 1]
@@ -154,7 +154,7 @@ async function renderDayDistances(dayGroups){
   if(lastDay?.distanceEl){
     const lastLocation = lastDay.trips[lastDay.trips.length - 1]?.location || ""
 
-    lastDay.distanceEl.textContent = "Calculating return distance to Taipei..."
+    lastDay.distanceEl.textContent = "計算返回台北距離中..."
 
     const [lastCoords, taipeiCoords] = await Promise.all([
       getCoords(lastLocation),
@@ -162,13 +162,13 @@ async function renderDayDistances(dayGroups){
     ])
 
     if(!lastCoords || !taipeiCoords){
-      lastDay.distanceEl.textContent = "Distance back to Taipei: unavailable"
+      lastDay.distanceEl.textContent = "返回台北距離：無法取得"
       return
     }
 
     const returnDistanceKm = calculateDistanceKm(lastCoords, taipeiCoords)
     lastDay.distanceEl.textContent =
-      `Distance back to Taipei: ${returnDistanceKm.toFixed(1)} km`
+      `返回台北距離：${returnDistanceKm.toFixed(1)} 公里`
   }
 }
 
@@ -307,26 +307,21 @@ async function loadTrips(){
     const title = document.createElement("h3")
     title.textContent = `Day ${group.day}`
 
-    const distanceInfo = document.createElement("div")
-    distanceInfo.className = "day-distance"
-    distanceInfo.textContent = "Waiting for next day distance..."
-
     const dayContainer = document.createElement("div")
     dayContainer.className = "day-items"
 
     dayBlock.appendChild(title)
-    dayBlock.appendChild(distanceInfo)
     dayBlock.appendChild(dayContainer)
     container.appendChild(dayBlock)
 
-    group.distanceEl = distanceInfo
-
     new Sortable(dayContainer, { animation: 150 })
 
-    for(const trip of group.trips){
+    for(const [index, trip] of group.trips.entries()){
 
       const card = document.createElement("div")
       card.className = "trip-card"
+
+      const isLastTripOfDay = index === group.trips.length - 1
 
       card.innerHTML = `
         <div class="trip-info">
@@ -345,6 +340,12 @@ async function loadTrips(){
             ${trip.detail || ""}
           </div>
 
+          ${isLastTripOfDay ? `
+            <div class="trip-distance">
+              距離資訊載入中...
+            </div>
+          ` : ""}
+
         </div>
 
         <button class="delete-btn" onclick="deleteTrip(${trip.id})">
@@ -353,6 +354,10 @@ async function loadTrips(){
       `
 
       dayContainer.appendChild(card)
+
+      if(isLastTripOfDay){
+        group.distanceEl = card.querySelector(".trip-distance")
+      }
 
       card.querySelectorAll(".editable").forEach(el=>{
         el.addEventListener("click", ()=> makeEditable(el, trip))
