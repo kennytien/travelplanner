@@ -3,6 +3,7 @@ const API = "https://dreamtheater.onrender.com"
 let map
 let markers = []
 let polyline
+const geocodeCache = new Map()
 
 /* -----------------------
    日期格式
@@ -48,21 +49,127 @@ function clearMap(){
    Geocode
 ----------------------- */
 async function getCoords(location){
+  if(!location) return null
+
+  if(geocodeCache.has(location)){
+    return geocodeCache.get(location)
+  }
+
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${location}`
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`
     )
 
     const data = await res.json()
 
     if(data.length > 0){
-      return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+      const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+      geocodeCache.set(location, coords)
+      return coords
     }
   } catch(err){
     console.error("Geocode error:", err)
   }
 
+  geocodeCache.set(location, null)
   return null
+}
+
+function toRadians(value){
+  return value * Math.PI / 180
+}
+
+function calculateDistanceKm(fromCoords, toCoords){
+  const [lat1, lon1] = fromCoords
+  const [lat2, lon2] = toCoords
+  const earthRadiusKm = 6371
+
+  const dLat = toRadians(lat2 - lat1)
+  const dLon = toRadians(lon2 - lon1)
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+    Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) ** 2
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return earthRadiusKm * c
+}
+
+function groupTripsByDay(trips){
+  const dayGroups = []
+  const dayMap = new Map()
+
+  for(const trip of trips){
+    if(!dayMap.has(trip.day)){
+      const group = { day: trip.day, trips: [] }
+      dayMap.set(trip.day, group)
+      dayGroups.push(group)
+    }
+
+    dayMap.get(trip.day).trips.push(trip)
+  }
+
+  return dayGroups
+}
+
+async function renderDayDistances(dayGroups){
+  const dayStops = dayGroups
+    .map(group => ({
+      day: group.day,
+      distanceEl: group.distanceEl,
+      startLocation: group.trips[0]?.location || "",
+      endLocation: group.trips[group.trips.length - 1]?.location || ""
+    }))
+    .filter(group => group.startLocation || group.endLocation)
+
+  for(let i = 0; i < dayStops.length - 1; i++){
+    const currentDay = dayStops[i]
+    const nextDay = dayStops[i + 1]
+
+    if(!currentDay.distanceEl) continue
+
+    currentDay.distanceEl.textContent =
+      `Calculating Day ${currentDay.day} → Day ${nextDay.day} distance...`
+
+    const [fromCoords, toCoords] = await Promise.all([
+      getCoords(currentDay.endLocation),
+      getCoords(nextDay.startLocation)
+    ])
+
+    if(!fromCoords || !toCoords){
+      currentDay.distanceEl.textContent =
+        `Distance to Day ${nextDay.day}: unavailable`
+      continue
+    }
+
+    const distanceKm = calculateDistanceKm(fromCoords, toCoords)
+    currentDay.distanceEl.textContent =
+      `Distance to Day ${nextDay.day}: ${distanceKm.toFixed(1)} km`
+  }
+
+  const lastDay = dayGroups[dayGroups.length - 1]
+
+  if(lastDay?.distanceEl){
+    const lastLocation = lastDay.trips[lastDay.trips.length - 1]?.location || ""
+
+    lastDay.distanceEl.textContent = "Calculating return distance to Taipei..."
+
+    const [lastCoords, taipeiCoords] = await Promise.all([
+      getCoords(lastLocation),
+      getCoords("Taipei")
+    ])
+
+    if(!lastCoords || !taipeiCoords){
+      lastDay.distanceEl.textContent = "Distance back to Taipei: unavailable"
+      return
+    }
+
+    const returnDistanceKm = calculateDistanceKm(lastCoords, taipeiCoords)
+    lastDay.distanceEl.textContent =
+      `Distance back to Taipei: ${returnDistanceKm.toFixed(1)} km`
+  }
 }
 
 /* -----------------------
@@ -185,116 +292,124 @@ async function loadTrips(){
 
   trips.sort((a,b)=> a.day - b.day)
 
+  const dayGroups = groupTripsByDay(trips)
+
   const container = document.getElementById("tripList")
   container.innerHTML = ""
 
   clearMap()
 
-  let currentDay = null
-  let dayContainer
   let routeCoords = []
+  for(const group of dayGroups){
+    const dayBlock = document.createElement("div")
+    dayBlock.className = "day-group"
 
-  for(const trip of trips){
+    const title = document.createElement("h3")
+    title.textContent = `Day ${group.day}`
 
-    if(trip.day !== currentDay){
+    const distanceInfo = document.createElement("div")
+    distanceInfo.className = "day-distance"
+    distanceInfo.textContent = "Waiting for next day distance..."
 
-      currentDay = trip.day
+    const dayContainer = document.createElement("div")
+    dayContainer.className = "day-items"
 
-      const dayBlock = document.createElement("div")
-      dayBlock.className = "day-group"
-      dayBlock.innerHTML = `<h3>Day ${currentDay}</h3>`
+    dayBlock.appendChild(title)
+    dayBlock.appendChild(distanceInfo)
+    dayBlock.appendChild(dayContainer)
+    container.appendChild(dayBlock)
 
-      dayContainer = document.createElement("div")
-      dayContainer.className = "day-items"
+    group.distanceEl = distanceInfo
 
-      dayBlock.appendChild(dayContainer)
-      container.appendChild(dayBlock)
+    new Sortable(dayContainer, { animation: 150 })
 
-      new Sortable(dayContainer, { animation: 150 })
-    }
+    for(const trip of group.trips){
 
-    const card = document.createElement("div")
-    card.className = "trip-card"
+      const card = document.createElement("div")
+      card.className = "trip-card"
 
-    card.innerHTML = `
-      <div class="trip-info">
+      card.innerHTML = `
+        <div class="trip-info">
 
-        <div class="editable" data-field="location">
-          📍 ${trip.location}
-          <span class="elevation">⛰ loading...</span>
-          <span class="weather">🌤 loading...</span>
+          <div class="editable" data-field="location">
+            📍 ${trip.location}
+            <span class="elevation">⛰ loading...</span>
+            <span class="weather">🌤 loading...</span>
+          </div>
+
+          <div class="editable" data-field="date">
+            📅 ${formatDate(trip.date)}
+          </div>
+
+          <div class="editable" data-field="detail">
+            ${trip.detail || ""}
+          </div>
+
         </div>
 
-        <div class="editable" data-field="date">
-          📅 ${formatDate(trip.date)}
-        </div>
+        <button class="delete-btn" onclick="deleteTrip(${trip.id})">
+          Delete
+        </button>
+      `
 
-        <div class="editable" data-field="detail">
-          ${trip.detail || ""}
-        </div>
+      dayContainer.appendChild(card)
 
-      </div>
+      card.querySelectorAll(".editable").forEach(el=>{
+        el.addEventListener("click", ()=> makeEditable(el, trip))
+      })
 
-      <button class="delete-btn" onclick="deleteTrip(${trip.id})">
-        Delete
-      </button>
-    `
+      /* -----------------------
+         Geocode → Elevation → Weather
+      ----------------------- */
+      getCoords(trip.location).then(coords => {
 
-    dayContainer.appendChild(card)
+        if(!coords){
+          card.querySelector(".elevation").textContent = "⛰ N/A"
+          card.querySelector(".weather").textContent = "🌤 N/A"
+          return
+        }
 
-    card.querySelectorAll(".editable").forEach(el=>{
-      el.addEventListener("click", ()=> makeEditable(el, trip))
-    })
+        routeCoords.push(coords)
 
-    /* -----------------------
-       Geocode → Elevation → Weather
-    ----------------------- */
-    getCoords(trip.location).then(coords => {
+        // Elevation
+        getElevation(coords[0], coords[1]).then(elevation => {
 
-      if(!coords){
-        card.querySelector(".elevation").textContent = "⛰ N/A"
-        card.querySelector(".weather").textContent = "🌤 N/A"
-        return
-      }
+          card.querySelector(".elevation").textContent =
+            elevation !== null ? `⛰ ${elevation}m` : "⛰ N/A"
 
-      routeCoords.push(coords)
+          // Weather
+          getWeather(coords[0], coords[1]).then(w => {
 
-      // Elevation
-      getElevation(coords[0], coords[1]).then(elevation => {
+            card.querySelector(".weather").textContent =
+              w.temp !== null
+                ? `🌡 ${w.temp}°C | 🌧 ${w.rain}mm | 💨 ${w.wind}m/s`
+                : "🌤 N/A"
 
-        card.querySelector(".elevation").textContent =
-          elevation !== null ? `⛰ ${elevation}m` : "⛰ N/A"
+            // Marker & Popup
+            const marker = L.marker(coords)
+              .addTo(map)
+              .bindPopup(`
+                <b>${trip.location}</b><br><br>
+                ⛰ 海拔：${elevation ?? "N/A"} m<br>
+                🌡 氣溫：${w.temp ?? "N/A"} °C<br>
+                🌧 降雨：${w.rain ?? "N/A"} mm<br>
+                💨 風速：${w.wind ?? "N/A"} m/s
+              `)
 
-        // Weather
-        getWeather(coords[0], coords[1]).then(w => {
+            marker._tripId = trip.id
+            markers.push(marker)
 
-          card.querySelector(".weather").textContent =
-            w.temp !== null
-              ? `🌡 ${w.temp}°C | 🌧 ${w.rain}mm | 💨 ${w.wind}m/s`
-              : "🌤 N/A"
-
-          // Marker & Popup
-          const marker = L.marker(coords)
-            .addTo(map)
-            .bindPopup(`
-              <b>${trip.location}</b><br><br>
-              ⛰ 海拔：${elevation ?? "N/A"} m<br>
-              🌡 氣溫：${w.temp ?? "N/A"} °C<br>
-              🌧 降雨：${w.rain ?? "N/A"} mm<br>
-              💨 風速：${w.wind ?? "N/A"} m/s
-            `)
-
-          marker._tripId = trip.id   // ⭐綁定 tripId，供天氣自動更新用
-          markers.push(marker)
-
-          if(routeCoords.length > 1){
-            if(polyline) map.removeLayer(polyline)
-            polyline = L.polyline(routeCoords).addTo(map)
-          }
+            if(routeCoords.length > 1){
+              if(polyline) map.removeLayer(polyline)
+              polyline = L.polyline(routeCoords).addTo(map)
+            }
+          })
         })
       })
-    })
+    }
   }
+
+  renderDayDistances(dayGroups)
 }
 
 /* -----------------------

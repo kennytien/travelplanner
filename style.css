@@ -167,6 +167,13 @@ button:hover {
   color: #333;
 }
 
+.day-distance {
+  margin-bottom: 12px;
+  color: #2f5d8a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 
 /* -----------------------
    Day Items
