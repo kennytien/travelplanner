@@ -75,26 +75,34 @@ async function getCoords(location){
   return null
 }
 
-function toRadians(value){
-  return value * Math.PI / 180
-}
+async function getRouteDistanceKm(fromCoords, toCoords){
+  const [fromLat, fromLon] = fromCoords
+  const [toLat, toLon] = toCoords
 
-function calculateDistanceKm(fromCoords, toCoords){
-  const [lat1, lon1] = fromCoords
-  const [lat2, lon2] = toCoords
-  const earthRadiusKm = 6371
+  try {
+    const res = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${fromLon},${fromLat};${toLon},${toLat}` +
+      `?overview=false`
+    )
 
-  const dLat = toRadians(lat2 - lat1)
-  const dLon = toRadians(lon2 - lon1)
+    if(!res.ok){
+      console.warn("Routing API failed:", res.status)
+      return null
+    }
 
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) *
-    Math.cos(toRadians(lat2)) *
-    Math.sin(dLon / 2) ** 2
+    const data = await res.json()
+    const meters = data.routes?.[0]?.distance
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return earthRadiusKm * c
+    if(typeof meters !== "number"){
+      return null
+    }
+
+    return meters / 1000
+  } catch(err){
+    console.error("Routing error:", err)
+    return null
+  }
 }
 
 function groupTripsByDay(trips){
@@ -131,7 +139,7 @@ async function renderDayDistances(dayGroups){
     if(!currentDay.distanceEl) continue
 
     currentDay.distanceEl.textContent =
-      `計算 Day ${currentDay.day} 到 Day ${nextDay.day} 距離中...`
+      `計算 Day ${currentDay.day} 到 Day ${nextDay.day} 道路距離中...`
 
     const [fromCoords, toCoords] = await Promise.all([
       getCoords(currentDay.endLocation),
@@ -144,9 +152,16 @@ async function renderDayDistances(dayGroups){
       continue
     }
 
-    const distanceKm = calculateDistanceKm(fromCoords, toCoords)
+    const distanceKm = await getRouteDistanceKm(fromCoords, toCoords)
+
+    if(distanceKm === null){
+      currentDay.distanceEl.textContent =
+        `到 Day ${nextDay.day} 的道路距離：無法取得`
+      continue
+    }
+
     currentDay.distanceEl.textContent =
-      `到 Day ${nextDay.day} 的距離：${distanceKm.toFixed(1)} 公里`
+      `到 Day ${nextDay.day} 的道路距離：${distanceKm.toFixed(1)} 公里`
   }
 
   const lastDay = dayGroups[dayGroups.length - 1]
@@ -154,7 +169,7 @@ async function renderDayDistances(dayGroups){
   if(lastDay?.distanceEl){
     const lastLocation = lastDay.trips[lastDay.trips.length - 1]?.location || ""
 
-    lastDay.distanceEl.textContent = "計算返回台北距離中..."
+    lastDay.distanceEl.textContent = "計算返回台北道路距離中..."
 
     const [lastCoords, taipeiCoords] = await Promise.all([
       getCoords(lastLocation),
@@ -166,9 +181,15 @@ async function renderDayDistances(dayGroups){
       return
     }
 
-    const returnDistanceKm = calculateDistanceKm(lastCoords, taipeiCoords)
+    const returnDistanceKm = await getRouteDistanceKm(lastCoords, taipeiCoords)
+
+    if(returnDistanceKm === null){
+      lastDay.distanceEl.textContent = "返回台北道路距離：無法取得"
+      return
+    }
+
     lastDay.distanceEl.textContent =
-      `返回台北距離：${returnDistanceKm.toFixed(1)} 公里`
+      `返回台北道路距離：${returnDistanceKm.toFixed(1)} 公里`
   }
 }
 
